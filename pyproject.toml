@@ -1,33 +1,40 @@
-[tool.poetry]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
 name = "customer-service"
 version = "0.1.0"
 description = "customer service demo using Agent Development Kit"
-authors = ["Satvik Shrivastava <satvik.shrivastava.exe@gmail.com>"]
-license = "Apache License 2.0"
 readme = "README.md"
+authors = [
+    {name = "Satvik Shrivastava", email = "satvik.shrivastava.exe@gmail.com"}
+]
+license = {text = "Apache License 2.0"}
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic-settings>=2.8.1",
+    "tabulate>=0.9.0",
+    "cloudpickle>=3.1.1",
+    "pylint>=3.3.6",
+    "google-cloud-aiplatform[adk,agent_engine]>=1.88.0",
+    "google-adk>=0.5.0",
+    "mysql-connector-python>=9.3.0",
+    "python-dotenv>=1.1.0",
+]
 
-[tool.poetry.dependencies]
-python = "^3.11"
-pydantic-settings = "^2.8.1"
-tabulate = "^0.9.0"
-cloudpickle = "^3.1.1"
-pylint = "^3.3.6"
-google-cloud-aiplatform = {extras = ["adk","agent_engine"], version = "^1.88.0"}
-google-adk = "^0.5.0"
-mysql-connector-python = "^9.3.0"
-python-dotenv = "^1.1.0"
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.3.5"
-pytest-mock = "^3.14.0"
-scikit-learn = "^1.6.1"
-pytest-cov = "^6.0.0"
-pytest-asyncio = "^0.25.3"
-flake8-pyproject = "^1.2.3"
-pylint = "^3.3.6"
-pyink = "^24.10.1"
-google-cloud-aiplatform = {extras = ["evaluation"], version = "^1.88.0"}
-
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.5",
+    "pytest-mock>=3.14.0",
+    "scikit-learn>=1.6.1",
+    "pytest-cov>=6.0.0",
+    "pytest-asyncio>=0.25.3",
+    "flake8-pyproject>=1.2.3",
+    "pylint>=3.3.6",
+    "pyink>=24.10.1",
+    "google-cloud-aiplatform[evaluation]>=1.88.0",
+]
 
 [tool.pytest.ini_options]
 console_output_style = "progress"
@@ -45,12 +52,6 @@ log_cli_format ="[%(asctime)s] %(levelname)s (%(funcName)s) \t [%(pathname)s:%(l
 filterwarnings = [
     "ignore::UserWarning",
 ]
-
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.mason"
-
 
 [tool.pyink]
 line-length=80

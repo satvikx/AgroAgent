@@ -3,3 +3,9 @@ customer_service-0.1.0-py3-none-any.whl
 google_adk-.*.whl
 _tmp*
 temp.txt
+.env
+
+# Pychache
+__pycache__/
+*.py[cod]
+*.pyc 
