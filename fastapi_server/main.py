@@ -219,7 +219,7 @@ async def websocket_endpoint(
 
 # Mounting Static files later
 
-STATIC_DIR = Path("static")
+STATIC_DIR = Path("fastapi_server/static")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 

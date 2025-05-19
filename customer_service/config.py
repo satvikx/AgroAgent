@@ -46,3 +46,9 @@ class Config(BaseSettings):
     CLOUD_LOCATION: str = Field(default="us-central1")
     GENAI_USE_VERTEXAI: str = Field(default="1")
     API_KEY: str | None = Field(default="")
+
+    print(API_KEY)
+    if API_KEY is None:
+        logger.warning("API_KEY is not set. Please set it in the .env file.")
+    else:
+        logger.info(f"API_KEY is set to {API_KEY}")
