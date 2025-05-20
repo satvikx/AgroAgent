@@ -20,19 +20,7 @@ from google.adk.sessions.in_memory_session_service import InMemorySessionService
 from google.genai import types
 from customer_service.agent import root_agent
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(),  # Log to console
-        logging.FileHandler(os.path.join("fastapi_server/logs", "server.log"), mode="a"),  # Log to file
-    ]
-)
-logger = logging.getLogger("bagro_chatbot")
-
-# Create logs directory if it doesn't exist
-os.makedirs("logs", exist_ok=True)
+from .log import logger
 
 #
 # ADK Streaming
@@ -212,6 +200,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 
@@ -239,10 +228,11 @@ async def websocket_endpoint(
     is_audio: str = Query(...),
 ):
     """Client websocket endpoint"""
-    # Print headers for debugging
-    logger.info(f"Websocket connection attempt from session {session_id}")
-    logger.debug(f"WebSocket headers: {websocket.headers}")
-
+    # Add more debug logging
+    logger.info(f"WebSocket connection attempt from {session_id} with protocol {websocket.headers.get('sec-websocket-protocol', 'none')}")
+    logger.info(f"Client using: {websocket.headers.get('user-agent')}")
+    logger.info(f"Connection headers: {dict(websocket.headers)}")
+    
     try:
         # Wait for client connection
         await websocket.accept()
@@ -283,3 +273,65 @@ async def root():
     except Exception as e:
         logger.error(f"Error serving index.html: {str(e)}")
         raise
+
+
+
+
+
+
+
+
+# Testing Websocket
+@app.get("/websocket-test")
+async def websocket_test():
+    html_content = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>WebSocket Test</title>
+        <script>
+            window.onload = function() {
+                const isSecure = window.location.protocol === "https:";
+                const wsProtocol = isSecure ? "wss://" : "ws://";
+                const wsUrl = wsProtocol + window.location.host + "/ws/test-session?is_audio=false";
+                
+                document.getElementById("wsurl").textContent = wsUrl;
+                document.getElementById("protocol").textContent = window.location.protocol;
+                
+                document.getElementById("testBtn").onclick = function() {
+                    try {
+                        const ws = new WebSocket(wsUrl);
+                        
+                        ws.onopen = function() {
+                            document.getElementById("status").textContent = "Connected!";
+                            document.getElementById("status").style.color = "green";
+                        };
+                        
+                        ws.onerror = function(error) {
+                            document.getElementById("status").textContent = "Error: " + error;
+                            document.getElementById("status").style.color = "red";
+                        };
+                        
+                        ws.onclose = function() {
+                            document.getElementById("status").textContent = "Connection closed";
+                            document.getElementById("status").style.color = "orange";
+                        };
+                    } catch(e) {
+                        document.getElementById("status").textContent = "Exception: " + e.message;
+                        document.getElementById("status").style.color = "red";
+                    }
+                };
+            };
+        </script>
+    </head>
+    <body>
+        <h1>WebSocket Connection Test</h1>
+        <p>Page Protocol: <span id="protocol"></span></p>
+        <p>WebSocket URL: <span id="wsurl"></span></p>
+        <button id="testBtn">Test Connection</button>
+        <p>Status: <span id="status">Not connected</span></p>
+    </body>
+    </html>
+    """
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse(content=html_content)

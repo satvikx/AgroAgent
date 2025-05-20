@@ -8,7 +8,12 @@
 
 // Global variables
 const sessionId = Math.random().toString().substring(10);
-const ws_url = "ws://" + window.location.host + "/ws/" + sessionId;
+const isSecure = window.location.protocol === "https:";
+const wsProtocol = isSecure ? "wss://" : "ws://";
+const ws_url = wsProtocol + window.location.host + "/ws/" + sessionId;
+
+console.log("Using WebSocket URL:", ws_url); // Add this for debugging
+
 let websocket = null;
 let is_audio = false;
 let currentMessageId = null; // Track the current message ID during a conversation turn
@@ -28,141 +33,151 @@ const recordingContainer = document.getElementById("recording-container");
 function connectWebsocket() {
   // Connect websocket
   const wsUrl = ws_url + "?is_audio=" + is_audio;
-  websocket = new WebSocket(wsUrl);
+  console.log("Attempting WebSocket connection to:", wsUrl);
+  console.log("Current page protocol:", window.location.protocol);
 
-  // Handle connection open
-  websocket.onopen = function () {
-    // Connection opened messages
-    console.log("WebSocket connection opened.");
-    connectionStatus.textContent = "Connected";
-    statusDot.classList.add("connected");
+  try {
+    websocket = new WebSocket(wsUrl);
 
-    // Enable the Send button
-    document.getElementById("sendButton").disabled = false;
-    addSubmitHandler();
-  };
+    // Handle connection open
+    websocket.onopen = function () {
+      // Connection opened messages
+      console.log("WebSocket connection opened.");
+      connectionStatus.textContent = "Connected";
+      statusDot.classList.add("connected");
 
-  // Handle incoming messages
-  websocket.onmessage = function (event) {
-    // Parse the incoming message
-    const message_from_server = JSON.parse(event.data);
-    console.log("[AGENT TO CLIENT] ", message_from_server);
+      // Enable the Send button
+      document.getElementById("sendButton").disabled = false;
+      addSubmitHandler();
+    };
 
-    // Show typing indicator for first message in a response sequence,
-    // but not for turn_complete messages
-    if (
-      !message_from_server.turn_complete &&
-      (message_from_server.mime_type === "text/plain" ||
-        message_from_server.mime_type === "audio/pcm")
-    ) {
-      typingIndicator.classList.add("visible");
-    }
+    // Handle incoming messages
+    websocket.onmessage = function (event) {
+      // Parse the incoming message
+      const message_from_server = JSON.parse(event.data);
+      console.log("[AGENT TO CLIENT] ", message_from_server);
 
-    // Check if the turn is complete
-    if (
-      message_from_server.turn_complete &&
-      message_from_server.turn_complete === true
-    ) {
-      // Reset currentMessageId to ensure the next message gets a new element
-      currentMessageId = null;
-      typingIndicator.classList.remove("visible");
-      return;
-    }
+      // Show typing indicator for first message in a response sequence,
+      // but not for turn_complete messages
+      if (
+        !message_from_server.turn_complete &&
+        (message_from_server.mime_type === "text/plain" ||
+          message_from_server.mime_type === "audio/pcm")
+      ) {
+        typingIndicator.classList.add("visible");
+      }
 
-    // If it's audio, play it
-    if (message_from_server.mime_type === "audio/pcm" && audioPlayerNode) {
-      audioPlayerNode.port.postMessage(base64ToArray(message_from_server.data));
+      // Check if the turn is complete
+      if (
+        message_from_server.turn_complete &&
+        message_from_server.turn_complete === true
+      ) {
+        // Reset currentMessageId to ensure the next message gets a new element
+        currentMessageId = null;
+        typingIndicator.classList.remove("visible");
+        return;
+      }
 
-      // If we have an existing message element for this turn, add audio icon if needed
-      if (currentMessageId) {
-        const messageElem = document.getElementById(currentMessageId);
-        if (
-          messageElem &&
-          !messageElem.querySelector(".audio-icon") &&
-          is_audio
-        ) {
+      // If it's audio, play it
+      if (message_from_server.mime_type === "audio/pcm" && audioPlayerNode) {
+        audioPlayerNode.port.postMessage(base64ToArray(message_from_server.data));
+
+        // If we have an existing message element for this turn, add audio icon if needed
+        if (currentMessageId) {
+          const messageElem = document.getElementById(currentMessageId);
+          if (
+            messageElem &&
+            !messageElem.querySelector(".audio-icon") &&
+            is_audio
+          ) {
+            const audioIcon = document.createElement("span");
+            audioIcon.className = "audio-icon";
+            messageElem.prepend(audioIcon);
+          }
+        }
+      }
+
+      // Handle text messages
+      if (message_from_server.mime_type === "text/plain") {
+        // Hide typing indicator
+        typingIndicator.classList.remove("visible");
+
+        const role = message_from_server.role || "model";
+
+        // If we already have a message element for this turn, append to it
+        if (currentMessageId && role === "model") {
+          const existingMessage = document.getElementById(currentMessageId);
+          if (existingMessage) {
+            // Append the text without adding extra spaces
+            // Use a span element to maintain proper text flow
+            const textNode = document.createTextNode(message_from_server.data);
+            existingMessage.appendChild(textNode);
+
+            // Scroll to the bottom
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            return;
+          }
+        }
+
+        // Create a new message element if it's a new turn or user message
+        const messageId = Math.random().toString(36).substring(7);
+        const messageElem = document.createElement("p");
+        messageElem.id = messageId;
+
+        // Set class based on role
+        messageElem.className =
+          role === "user" ? "user-message" : "agent-message";
+
+        // Add audio icon for model messages if audio is enabled
+        if (is_audio && role === "model") {
           const audioIcon = document.createElement("span");
           audioIcon.className = "audio-icon";
-          messageElem.prepend(audioIcon);
+          messageElem.appendChild(audioIcon);
         }
-      }
-    }
 
-    // Handle text messages
-    if (message_from_server.mime_type === "text/plain") {
-      // Hide typing indicator
+        // Add the text content
+        messageElem.appendChild(
+          document.createTextNode(message_from_server.data)
+        );
+
+        // Add the message to the DOM
+        messagesDiv.appendChild(messageElem);
+
+        // Remember the ID of this message for subsequent responses in this turn
+        if (role === "model") {
+          currentMessageId = messageId;
+        }
+
+        // Scroll to the bottom
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      }
+    };
+
+    // Handle connection close
+    websocket.onclose = function () {
+      console.log("WebSocket connection closed.");
+      document.getElementById("sendButton").disabled = true;
+      connectionStatus.textContent = "Disconnected. Reconnecting...";
+      statusDot.classList.remove("connected");
       typingIndicator.classList.remove("visible");
+      setTimeout(function () {
+        console.log("Reconnecting...");
+        connectWebsocket();
+      }, 5000);
+    };
 
-      const role = message_from_server.role || "model";
-
-      // If we already have a message element for this turn, append to it
-      if (currentMessageId && role === "model") {
-        const existingMessage = document.getElementById(currentMessageId);
-        if (existingMessage) {
-          // Append the text without adding extra spaces
-          // Use a span element to maintain proper text flow
-          const textNode = document.createTextNode(message_from_server.data);
-          existingMessage.appendChild(textNode);
-
-          // Scroll to the bottom
-          messagesDiv.scrollTop = messagesDiv.scrollHeight;
-          return;
-        }
-      }
-
-      // Create a new message element if it's a new turn or user message
-      const messageId = Math.random().toString(36).substring(7);
-      const messageElem = document.createElement("p");
-      messageElem.id = messageId;
-
-      // Set class based on role
-      messageElem.className =
-        role === "user" ? "user-message" : "agent-message";
-
-      // Add audio icon for model messages if audio is enabled
-      if (is_audio && role === "model") {
-        const audioIcon = document.createElement("span");
-        audioIcon.className = "audio-icon";
-        messageElem.appendChild(audioIcon);
-      }
-
-      // Add the text content
-      messageElem.appendChild(
-        document.createTextNode(message_from_server.data)
-      );
-
-      // Add the message to the DOM
-      messagesDiv.appendChild(messageElem);
-
-      // Remember the ID of this message for subsequent responses in this turn
-      if (role === "model") {
-        currentMessageId = messageId;
-      }
-
-      // Scroll to the bottom
-      messagesDiv.scrollTop = messagesDiv.scrollHeight;
-    }
-  };
-
-  // Handle connection close
-  websocket.onclose = function () {
-    console.log("WebSocket connection closed.");
-    document.getElementById("sendButton").disabled = true;
-    connectionStatus.textContent = "Disconnected. Reconnecting...";
+    websocket.onerror = function (e) {
+      console.log("WebSocket error: ", e);
+      connectionStatus.textContent = "Connection error";
+      statusDot.classList.remove("connected");
+      typingIndicator.classList.remove("visible");
+    };
+  }
+  catch (error) {
+    console.error("Error creating WebSocket:", error);
+    connectionStatus.textContent = "Connection failed: " + error.message;
     statusDot.classList.remove("connected");
-    typingIndicator.classList.remove("visible");
-    setTimeout(function () {
-      console.log("Reconnecting...");
-      connectWebsocket();
-    }, 5000);
-  };
-
-  websocket.onerror = function (e) {
-    console.log("WebSocket error: ", e);
-    connectionStatus.textContent = "Connection error";
-    statusDot.classList.remove("connected");
-    typingIndicator.classList.remove("visible");
-  };
+  }
 }
 connectWebsocket();
 
