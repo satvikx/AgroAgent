@@ -11,7 +11,6 @@ click==8.2.0
 cloudpickle==3.1.1
 colorama==0.4.6
 cryptography==45.0.2
--e file:///D:/Code/BAgro_Chatbot
 deprecated==1.2.18
 dill==0.4.0
 docstring-parser==0.16
