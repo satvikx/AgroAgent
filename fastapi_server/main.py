@@ -18,7 +18,7 @@ from google.adk.events.event import Event
 from google.adk.runners import Runner
 from google.adk.sessions.in_memory_session_service import InMemorySessionService
 from google.genai import types
-from customer_service.agent import root_agent
+from agrobot.agent import root_agent
 
 from .log import logger
 
@@ -33,56 +33,95 @@ logger.info("Environment variables loaded")
 APP_NAME = "ADK Streaming example"
 session_service = InMemorySessionService()
 
+active_sessions: dict[str, Any] = {}  # {session_id: (live_events, live_request_queue)}
+
+# def start_agent_session(session_id, is_audio=False):
+#     """Starts an agent session"""
+#     logger.info(f"Starting agent session for {session_id}, audio mode: {is_audio}")
+
+    
+#     # Create a Session
+#     session = session_service.create_session(
+#         app_name=APP_NAME,
+#         user_id=session_id,
+#         session_id=session_id,
+#     )
+
+#     # Create a Runner
+#     runner = Runner(
+#         app_name=APP_NAME,
+#         agent=root_agent,
+#         session_service=session_service,
+#     )
+
+#     # Set response modality
+#     modality = "AUDIO" if is_audio else "TEXT"
+
+#     # Create speech config with voice settings
+#     speech_config = types.SpeechConfig(
+#         voice_config=types.VoiceConfig(
+#             # Puck, Charon, Kore, Fenrir, Aoede, Leda, Orus, and Zephyr
+#             prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Kore")
+#         )
+#     )
+
+#     # Create run config with basic settings
+#     config = {"response_modalities": [modality], "speech_config": speech_config}
+
+#     # Add output_audio_transcription when audio is enabled to get both audio and text
+#     if is_audio:
+#         config["output_audio_transcription"] = {}
+
+#     run_config = RunConfig(**config)
+
+#     # Create a LiveRequestQueue for this session
+#     live_request_queue = LiveRequestQueue()
+
+#     # Start agent session
+#     live_events = runner.run_live(
+#         session=session,
+#         live_request_queue=live_request_queue,
+#         run_config=run_config,
+#     )
+#     logger.info(f"Agent session started successfully for {session_id}")
+#     return live_events, live_request_queue
 
 def start_agent_session(session_id, is_audio=False):
-    """Starts an agent session"""
-    logger.info(f"Starting agent session for {session_id}, audio mode: {is_audio}")
+    if session_id in active_sessions:
+        logger.info(f"Reusing existing session for {session_id}")
+        return active_sessions[session_id]
 
-    # Create a Session
+    logger.info(f"Starting new session for {session_id}, audio: {is_audio}")
+
     session = session_service.create_session(
         app_name=APP_NAME,
         user_id=session_id,
         session_id=session_id,
     )
 
-    # Create a Runner
     runner = Runner(
         app_name=APP_NAME,
         agent=root_agent,
         session_service=session_service,
     )
 
-    # Set response modality
     modality = "AUDIO" if is_audio else "TEXT"
-
-    # Create speech config with voice settings
     speech_config = types.SpeechConfig(
-        voice_config=types.VoiceConfig(
-            # Puck, Charon, Kore, Fenrir, Aoede, Leda, Orus, and Zephyr
-            prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Puck")
-        )
+        voice_config=types.VoiceConfig(prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Kore"))
     )
 
-    # Create run config with basic settings
     config = {"response_modalities": [modality], "speech_config": speech_config}
-
-    # Add output_audio_transcription when audio is enabled to get both audio and text
     if is_audio:
         config["output_audio_transcription"] = {}
 
     run_config = RunConfig(**config)
-
-    # Create a LiveRequestQueue for this session
     live_request_queue = LiveRequestQueue()
+    live_events = runner.run_live(session=session, live_request_queue=live_request_queue, run_config=run_config)
 
-    # Start agent session
-    live_events = runner.run_live(
-        session=session,
-        live_request_queue=live_request_queue,
-        run_config=run_config,
-    )
-    logger.info(f"Agent session started successfully for {session_id}")
+    active_sessions[session_id] = (live_events, live_request_queue)
+    logger.info(f"Session created and stored for {session_id}")
     return live_events, live_request_queue
+
 
 
 async def agent_to_client_messaging(
@@ -229,9 +268,9 @@ async def websocket_endpoint(
 ):
     """Client websocket endpoint"""
     # Add more debug logging
-    logger.info(f"WebSocket connection attempt from {session_id} with protocol {websocket.headers.get('sec-websocket-protocol', 'none')}")
-    logger.info(f"Client using: {websocket.headers.get('user-agent')}")
-    logger.info(f"Connection headers: {dict(websocket.headers)}")
+    # logger.info(f"WebSocket connection attempt from {session_id} with protocol {websocket.headers.get('sec-websocket-protocol', 'none')}")
+    # logger.info(f"Client using: {websocket.headers.get('user-agent')}")
+    # logger.info(f"Connection headers: {dict(websocket.headers)}")
     
     try:
         # Wait for client connection
@@ -255,8 +294,9 @@ async def websocket_endpoint(
         logger.error(f"Error in websocket endpoint for session {session_id}: {str(e)}")
         raise
     finally:
-        # Disconnected
-        logger.info(f"Client #{session_id} disconnected")
+        active_sessions.pop(session_id, None)  # Remove the session safely
+        logger.info(f"Client #{session_id} disconnected and session cleaned up")
+
 
 
 # Mounting Static files later

@@ -7,7 +7,14 @@
  */
 
 // Global variables
-const sessionId = Math.random().toString().substring(10);
+// const sessionId = Math.random().toString().substring(10);
+const storedSessionId = localStorage.getItem('bagro_session_id');
+// Use stored session or create new one
+const sessionId = storedSessionId || Math.random().toString().substring(10);
+// Store the session ID
+if (!storedSessionId) {
+  localStorage.setItem('bagro_session_id', sessionId);
+}
 const isSecure = window.location.protocol === "https:";
 const wsProtocol = isSecure ? "wss://" : "ws://";
 const ws_url = wsProtocol + window.location.host + "/ws/" + sessionId;
